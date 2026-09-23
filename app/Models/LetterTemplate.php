@@ -12,6 +12,7 @@ class LetterTemplate extends Model
     protected $fillable = [
         'name',
         'description',
+        'content',
         'required_fields',
     ];
 

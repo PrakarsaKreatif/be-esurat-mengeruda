@@ -11,13 +11,8 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('news', function (Blueprint $table) {
-            $table->id();
-            $table->string('judul');
-            $table->string('slug')->unique();
-            $table->string('banner')->nullable();
-            $table->longText('content');
-            $table->timestamps();
+        Schema::table('letter_templates', function (Blueprint $table) {
+            $table->longText('content')->nullable()->after('description');
         });
     }
 
@@ -26,6 +21,8 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('news');
+        Schema::table('letter_templates', function (Blueprint $table) {
+            $table->dropColumn('content');
+        });
     }
 };

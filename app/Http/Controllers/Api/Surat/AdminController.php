@@ -6,70 +6,211 @@ use App\Http\Controllers\Controller;
 use App\Mail\Surat\AccountApprovedMail;
 use App\Mail\Surat\LetterReadyMail;
 use App\Models\LetterRequest;
+use App\Models\LetterTemplate;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 
 class AdminController extends Controller
 {
     /**
-     * Daftar warga yang menunggu verifikasi (is_approved = false)
+     * Create Template
      */
-    public function getPendingUsers()
+    public function createTemplate(Request $request)
     {
-        $users = User::where('is_approved', false)
-            ->whereHas('roles', function ($query) {
-                $query->where('name', 'warga');
-            })
-            ->orderBy('created_at', 'desc')
-            ->get();
-
-        return response()->json([
-            'status' => 'success',
-            'data' => $users
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'content' => 'nullable|string',
+            'required_fields' => 'required|array'
         ]);
+
+        $template = LetterTemplate::create($validated);
+        return response()->json(['status' => 'success', 'data' => $template], 201);
+    }
+
+    /**
+     * Update Template
+     */
+    public function updateTemplate(Request $request, $id)
+    {
+        $template = LetterTemplate::findOrFail($id);
+        $validated = $request->validate([
+            'name' => 'sometimes|required|string|max:255',
+            'description' => 'nullable|string',
+            'content' => 'nullable|string',
+            'required_fields' => 'sometimes|required|array'
+        ]);
+
+        $template->update($validated);
+        return response()->json(['status' => 'success', 'data' => $template]);
+    }
+
+    /**
+     * Delete Template
+     */
+    public function deleteTemplate($id)
+    {
+        $template = LetterTemplate::findOrFail($id);
+        $template->delete();
+        return response()->json(['status' => 'success', 'message' => 'Template deleted']);
+    }
+    /**
+     * Daftar warga yang menunggu verifikasi (is_approved = false) dari SSO
+     */
+    public function getPendingUsers(Request $request)
+    {
+        $ssoApiUrl = env('SSO_API_URL', 'http://127.0.0.1:8002/api');
+        
+        try {
+            $response = Http::withToken($request->bearerToken())
+                            ->get($ssoApiUrl . '/admin/users/pending');
+            
+            \Illuminate\Support\Facades\Log::info('SSO getPendingUsers Response: ' . $response->body());
+
+            if ($response->successful()) {
+                return response()->json($response->json());
+            }
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to fetch pending users from SSO',
+                'sso_status' => $response->status(),
+                'sso_response' => $response->body()
+            ], $response->status());
+
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('SSO getPendingUsers Error: ' . $e->getMessage());
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Error communicating with SSO: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     /**
      * Daftar semua warga
      */
-    public function getAllUsers()
+    public function getAllUsers(Request $request)
     {
-        $users = User::whereHas('roles', function ($query) {
-                $query->where('name', 'warga');
-            })
-            ->orderBy('created_at', 'desc')
-            ->get();
+        $ssoApiUrl = env('SSO_API_URL', 'http://127.0.0.1:8002/api');
+        
+        try {
+            $response = Http::withToken($request->bearerToken())
+                            ->get($ssoApiUrl . '/admin/users/all');
+            
+            \Illuminate\Support\Facades\Log::info('SSO getAllUsers Response: ' . $response->body());
 
-        return response()->json([
-            'status' => 'success',
-            'data' => $users
-        ]);
+            if ($response->successful()) {
+                return response()->json($response->json());
+            }
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to fetch all users from SSO'
+            ], $response->status());
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Error communicating with SSO: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     /**
-     * Setujui akun warga
+     * Setujui akun warga melalui SSO
      */
-    public function approveUser($id)
+    public function approveUser(Request $request, $id)
     {
-        $user = User::findOrFail($id);
-        $user->is_approved = true;
-        $user->save();
-
-        // Kirim email notifikasi ke warga
+        $ssoApiUrl = env('SSO_API_URL', 'http://127.0.0.1:8002/api');
+        
         try {
-            Mail::to($user->email)->send(new AccountApprovedMail($user));
-        } catch (\Exception $e) {
-            report($e);
-        }
+            $response = Http::withToken($request->bearerToken())
+                            ->post($ssoApiUrl . '/admin/users/' . $id . '/approve');
+            
+            if ($response->successful()) {
+                // Berhasil di SSO, coba update di lokal jika user sudah ada (pernah login/disync)
+                $user = User::find($id);
+                if ($user) {
+                    $user->is_approved = true;
+                    $user->save();
 
-        return response()->json([
-            'status' => 'success',
-            'message' => 'Akun warga berhasil disetujui.',
-            'data' => $user
-        ]);
+                    // Kirim email notifikasi ke warga
+                    try {
+                        Mail::to($user->email)->send(new AccountApprovedMail($user));
+                    } catch (\Exception $e) {
+                        report($e);
+                    }
+                }
+                
+                return response()->json($response->json());
+            }
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to approve user in SSO'
+            ], $response->status());
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Error communicating with SSO: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function approveKk(Request $request, $id)
+    {
+        $ssoApiUrl = env('SSO_API_URL', 'http://127.0.0.1:8002/api');
+        
+        try {
+            $response = Http::withToken($request->bearerToken())
+                            ->post($ssoApiUrl . '/admin/users/' . $id . '/approve-kk');
+            
+            if ($response->successful()) {
+                return response()->json($response->json());
+            }
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to approve KK in SSO'
+            ], $response->status());
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Error communicating with SSO: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function rejectKk(Request $request, $id)
+    {
+        $ssoApiUrl = env('SSO_API_URL', 'http://127.0.0.1:8002/api');
+        
+        try {
+            $response = Http::withToken($request->bearerToken())
+                            ->post($ssoApiUrl . '/admin/users/' . $id . '/reject-kk');
+            
+            if ($response->successful()) {
+                return response()->json($response->json());
+            }
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to reject KK in SSO'
+            ], $response->status());
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Error communicating with SSO: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     /**

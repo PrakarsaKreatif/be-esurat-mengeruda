@@ -11,10 +11,10 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('apb_desas', function (Blueprint $table) {
-            $table->id();
-            $table->integer('year')->unique();
-            $table->json('data');
+        Schema::create('settings', function (Blueprint $table) {
+            $table->string('key')->unique();
+            $table->text('value')->nullable();
+            $table->string('group')->default('general');
             $table->timestamps();
         });
     }
@@ -24,6 +24,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('apb_desas');
+        Schema::dropIfExists('settings');
     }
 };

@@ -46,7 +46,7 @@ class DatabaseSeeder extends Seeder
             RbacSeeder::class,
             ESuratRoleSeeder::class,
             LetterTemplateSeeder::class,
-            TourismSeeder::class,
+            // TourismSeeder::class,
         ]);
     }
 }

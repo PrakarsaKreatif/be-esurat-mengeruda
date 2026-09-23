@@ -38,11 +38,17 @@ class User extends Authenticatable
 
     public function isWarga(): bool
     {
+        if ($this->relationLoaded('roles')) {
+            return collect($this->roles)->where('name', 'warga')->isNotEmpty();
+        }
         return $this->roles()->where('name', 'warga')->exists();
     }
 
     public function isAdminSurat(): bool
     {
+        if ($this->relationLoaded('roles')) {
+            return collect($this->roles)->whereIn('name', ['admin_surat', 'Super Admin', 'Admin'])->isNotEmpty();
+        }
         return $this->roles()->whereIn('name', ['admin_surat', 'Super Admin', 'Admin'])->exists();
     }
 }

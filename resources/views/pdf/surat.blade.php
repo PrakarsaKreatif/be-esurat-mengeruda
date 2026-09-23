@@ -82,45 +82,22 @@
 </head>
 <body>
     <div class="header">
-        <h3>PEMERINTAH KABUPATEN NAGEKEO<br />KECAMATAN SOA</h3>
-        <h1>DESA MENGERUDA</h1>
-        <p>Alamat: Jl. Raya Mengeruda, Soa, Kabupaten Nagekeo, Nusa Tenggara Timur</p>
+        @if(isset($settings['kop_logo']) && $settings['kop_logo'] != '')
+            <!-- Note: using absolute URL or base64 is recommended for DOMPDF logos -->
+            <img src="{{ $settings['kop_logo'] }}" alt="Logo" style="width: 80px; position: absolute; top: 10px; left: 10px;" />
+        @endif
+        <h3>{!! $settings['kop_pemda'] ?? 'PEMERINTAH DAERAH' !!}</h3>
+        <h1>{{ $settings['kop_desa'] ?? 'DESA' }}</h1>
+        <p>{{ $settings['kop_alamat'] ?? '' }}</p>
     </div>
 
     <div class="title">
         <h2>{{ $letterRequest->template->name }}</h2>
-        <p>Nomor: 140 / ES / MGR / {{ date('m') }} / {{ date('Y') }}</p>
+        <p>Nomor: {{ $nomorSurat }}</p>
     </div>
 
     <div class="content">
-        <p>Yang bertanda tangan di bawah ini Kepala Desa Mengeruda, Kecamatan Soa, Kabupaten Nagekeo, dengan ini menerangkan bahwa:</p>
-
-        <table class="table-data">
-            <tr>
-                <td class="label">Nama Lengkap</td>
-                <td>: <strong>{{ strtoupper($letterRequest->user->name) }}</strong></td>
-            </tr>
-            <tr>
-                <td class="label">NIK</td>
-                <td>: {{ $letterRequest->user->nik ?? '-' }}</td>
-            </tr>
-            <tr>
-                <td class="label">No. Telepon</td>
-                <td>: {{ $letterRequest->user->phone ?? '-' }}</td>
-            </tr>
-            @if(is_array($letterRequest->form_data))
-                @foreach($letterRequest->form_data as $key => $value)
-                    <tr>
-                        <td class="label">{{ ucwords(str_replace('_', ' ', $key)) }}</td>
-                        <td>: {{ $value }}</td>
-                    </tr>
-                @endforeach
-            @endif
-        </table>
-
-        <p>Orang tersebut di atas adalah benar-benar penduduk/warga Desa Mengeruda yang berdomisili di wilayah Desa Mengeruda. Surat keterangan ini diterbitkan atas permintaan yang bersangkutan untuk keperluan resmi sesuai permohonan.</p>
-
-        <p>Demikian surat keterangan ini diberikan agar dapat dipergunakan sebagaimana mestinya.</p>
+        {!! $parsedContent !!}
     </div>
 
     <div class="signature-box">
