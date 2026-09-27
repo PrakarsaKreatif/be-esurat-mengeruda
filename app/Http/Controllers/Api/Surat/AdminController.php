@@ -242,18 +242,6 @@ class AdminController extends Controller
         }
     }
 
-    /**
-     * Streaming aman berkas KTP warga dari direktori privat
-     */
-    public function viewUserKtp($id)
-    {
-        $user = User::findOrFail($id);
-        if (!$user->ktp_path || !Storage::disk('private')->exists($user->ktp_path)) {
-            return response()->json(['message' => 'Dokumen KTP tidak ditemukan.'], 404);
-        }
-
-        return Storage::disk('private')->response($user->ktp_path);
-    }
 
     /**
      * Daftar permohonan surat (opsional filter status: pending, approved, rejected)
