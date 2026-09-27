@@ -171,7 +171,8 @@ class AdminController extends Controller
         $ssoApiUrl = env('SSO_API_URL', 'http://127.0.0.1:8002/api');
         
         try {
-            $response = Http::withToken(request()->bearerToken())
+            $token = request()->bearerToken() ?? request()->query('token');
+            $response = Http::withToken($token)
                             ->get($ssoApiUrl . '/admin/users/' . $id . '/ktp');
             
             if ($response->successful()) {
