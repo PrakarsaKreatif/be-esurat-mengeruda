@@ -163,6 +163,35 @@ class AdminController extends Controller
         }
     }
 
+    /**
+     * Lihat foto KTP warga dari SSO
+     */
+    public function viewUserKtp($id)
+    {
+        $ssoApiUrl = env('SSO_API_URL', 'http://127.0.0.1:8002/api');
+        
+        try {
+            $response = Http::withToken(request()->bearerToken())
+                            ->get($ssoApiUrl . '/admin/users/' . $id . '/ktp');
+            
+            if ($response->successful()) {
+                // Return the image directly
+                return response($response->body(), 200)->header('Content-Type', $response->header('Content-Type'));
+            }
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to fetch KTP from SSO'
+            ], $response->status());
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Error communicating with SSO: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
     public function approveKk(Request $request, $id)
     {
         $ssoApiUrl = env('SSO_API_URL', 'http://127.0.0.1:8002/api');
