@@ -17,12 +17,14 @@ class LetterRequest extends Model
         'pdf_path',
         'rejection_reason',
         'token',
+        'requester_data',
     ];
 
     protected function casts(): array
     {
         return [
             'form_data' => 'array',
+            'requester_data' => 'array',
         ];
     }
 

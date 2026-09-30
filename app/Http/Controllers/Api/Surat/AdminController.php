@@ -67,6 +67,7 @@ class AdminController extends Controller
         
         try {
             $response = Http::withToken($request->bearerToken())
+                            ->acceptJson()
                             ->get($ssoApiUrl . '/admin/users/pending');
             
             \Illuminate\Support\Facades\Log::info('SSO getPendingUsers Response: ' . $response->body());
@@ -100,6 +101,7 @@ class AdminController extends Controller
         
         try {
             $response = Http::withToken($request->bearerToken())
+                            ->acceptJson()
                             ->get($ssoApiUrl . '/admin/users/all');
             
             \Illuminate\Support\Facades\Log::info('SSO getAllUsers Response: ' . $response->body());
@@ -130,6 +132,7 @@ class AdminController extends Controller
         
         try {
             $response = Http::withToken($request->bearerToken())
+                            ->acceptJson()
                             ->post($ssoApiUrl . '/admin/users/' . $id . '/approve');
             
             if ($response->successful()) {
@@ -173,6 +176,7 @@ class AdminController extends Controller
         try {
             $token = request()->bearerToken() ?? request()->query('token');
             $response = Http::withToken($token)
+                            ->acceptJson()
                             ->get($ssoApiUrl . '/admin/users/' . $id . '/ktp');
             
             if ($response->successful()) {
@@ -193,12 +197,41 @@ class AdminController extends Controller
         }
     }
 
+    public function viewUserKk($id)
+    {
+        $ssoApiUrl = env('SSO_API_URL', 'http://127.0.0.1:8002/api');
+        
+        try {
+            $token = request()->bearerToken() ?? request()->query('token');
+            $response = Http::withToken($token)
+                            ->acceptJson()
+                            ->get($ssoApiUrl . '/admin/users/' . $id . '/kk');
+            
+            if ($response->successful()) {
+                // Return the image directly
+                return response($response->body(), 200)->header('Content-Type', $response->header('Content-Type'));
+            }
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to fetch KK from SSO'
+            ], $response->status());
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Error communicating with SSO: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
     public function approveKk(Request $request, $id)
     {
         $ssoApiUrl = env('SSO_API_URL', 'http://127.0.0.1:8002/api');
         
         try {
             $response = Http::withToken($request->bearerToken())
+                            ->acceptJson()
                             ->post($ssoApiUrl . '/admin/users/' . $id . '/approve-kk');
             
             if ($response->successful()) {
@@ -224,6 +257,7 @@ class AdminController extends Controller
         
         try {
             $response = Http::withToken($request->bearerToken())
+                            ->acceptJson()
                             ->post($ssoApiUrl . '/admin/users/' . $id . '/reject-kk');
             
             if ($response->successful()) {
@@ -252,7 +286,11 @@ class AdminController extends Controller
         $query = LetterRequest::with(['user', 'template'])->orderBy('created_at', 'desc');
         
         if ($request->has('status') && $request->status !== 'all') {
-            $query->where('status', $request->status);
+            if ($request->status === 'pending') {
+                $query->whereIn('status', ['pending', 'revision', 'review']);
+            } else {
+                $query->where('status', $request->status);
+            }
         }
 
         return response()->json([
@@ -284,7 +322,7 @@ class AdminController extends Controller
         // Generate PDF sisi server via PdfController Helper
         $pdfPath = PdfController::generateLetterPdf($letterRequest);
 
-        $letterRequest->status = 'approved';
+        $letterRequest->status = 'review'; // Ubah dari 'approved' menjadi 'review'
         $letterRequest->pdf_path = $pdfPath;
         $letterRequest->save();
 
@@ -298,6 +336,23 @@ class AdminController extends Controller
         return response()->json([
             'status' => 'success',
             'message' => 'Permohonan surat berhasil disetujui dan PDF telah diterbitkan.',
+            'data' => $letterRequest
+        ]);
+    }
+
+    public function updateLetterRequest(Request $request, $id)
+    {
+        $validated = $request->validate([
+            'form_data' => 'required|array'
+        ]);
+
+        $letterRequest = LetterRequest::findOrFail($id);
+        $letterRequest->form_data = $validated['form_data'];
+        $letterRequest->save();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Data surat berhasil diperbarui.',
             'data' => $letterRequest
         ]);
     }

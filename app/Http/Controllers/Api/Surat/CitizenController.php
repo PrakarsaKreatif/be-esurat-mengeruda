@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api\Surat;
 
 use App\Http\Controllers\Controller;
 use App\Mail\Surat\NewLetterRequestMail;
+use App\Mail\Surat\LetterRevisionRequestMail;
+use App\Mail\Surat\LetterFinalizedMail;
 use App\Models\LetterRequest;
 use App\Models\LetterTemplate;
 use Illuminate\Http\Request;
@@ -58,10 +60,24 @@ class CitizenController extends Controller
             'form_data' => 'required|array',
         ]);
 
+        $formData = $validated['form_data'];
+        
+        $requesterData = [
+            'name' => $user->name,
+            'nik' => $user->nik,
+            'phone' => $user->phone,
+        ];
+
+        if (isset($formData['family_member_name'])) {
+            $requesterData['name'] = $formData['family_member_name'];
+            $requesterData['nik'] = $formData['family_member_nik'] ?? null;
+        }
+
         $letterRequest = LetterRequest::create([
             'user_id' => $user->id,
             'template_id' => $validated['template_id'],
-            'form_data' => $validated['form_data'],
+            'form_data' => $formData,
+            'requester_data' => $requesterData,
             'status' => 'pending',
         ]);
 
@@ -69,8 +85,15 @@ class CitizenController extends Controller
 
         // Kirim email notifikasi ke Admin
         try {
-            $adminEmail = env('ADMIN_SURAT_EMAIL', 'admin@mengeruda.id');
-            Mail::to($adminEmail)->send(new NewLetterRequestMail($letterRequest));
+            $admins = \App\Models\User::whereHas('roles', function ($query) {
+                $query->whereIn('name', ['Super Admin', 'admin_surat', 'Admin']);
+            })->get();
+
+            foreach ($admins as $admin) {
+                if ($admin->email) {
+                    Mail::to($admin->email)->send(new NewLetterRequestMail($letterRequest));
+                }
+            }
         } catch (\Exception $e) {
             report($e);
         }
@@ -95,6 +118,85 @@ class CitizenController extends Controller
         return response()->json([
             'status' => 'success',
             'data' => $requests
+        ]);
+    }
+
+    public function acceptLetter(Request $request, $id)
+    {
+        $letterRequest = LetterRequest::where('user_id', $request->user()->id)->findOrFail($id);
+
+        if ($letterRequest->status !== 'review') {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Status surat tidak valid untuk diterima.'
+            ], 400);
+        }
+
+        $letterRequest->status = 'approved';
+        $letterRequest->save();
+        $letterRequest->load(['user', 'template']);
+
+        // Kirim email notifikasi ke admin
+        try {
+            $admins = \App\Models\User::whereHas('roles', function ($query) {
+                $query->whereIn('name', ['Super Admin', 'admin_surat', 'Admin']);
+            })->get();
+
+            foreach ($admins as $admin) {
+                if ($admin->email) {
+                    Mail::to($admin->email)->send(new LetterFinalizedMail($letterRequest));
+                }
+            }
+        } catch (\Exception $e) {
+            report($e);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Surat berhasil diterima dan final.',
+            'data' => $letterRequest
+        ]);
+    }
+
+    public function requestRevision(Request $request, $id)
+    {
+        $validated = $request->validate([
+            'reason' => 'required|string'
+        ]);
+
+        $letterRequest = LetterRequest::where('user_id', $request->user()->id)->findOrFail($id);
+
+        if ($letterRequest->status !== 'review') {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Status surat tidak valid untuk direvisi.'
+            ], 400);
+        }
+
+        $letterRequest->status = 'revision';
+        $letterRequest->rejection_reason = $validated['reason'];
+        $letterRequest->save();
+        $letterRequest->load(['user', 'template']);
+
+        // Kirim email notifikasi ke admin
+        try {
+            $admins = \App\Models\User::whereHas('roles', function ($query) {
+                $query->whereIn('name', ['Super Admin', 'admin_surat', 'Admin']);
+            })->get();
+
+            foreach ($admins as $admin) {
+                if ($admin->email) {
+                    Mail::to($admin->email)->send(new LetterRevisionRequestMail($letterRequest));
+                }
+            }
+        } catch (\Exception $e) {
+            report($e);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Permintaan revisi berhasil dikirim ke Admin.',
+            'data' => $letterRequest
         ]);
     }
 }

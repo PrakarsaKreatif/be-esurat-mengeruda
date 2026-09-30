@@ -19,22 +19,37 @@
             padding-bottom: 10px;
             margin-bottom: 20px;
         }
-        .header h3 {
+        .header h3, .header h2, .header h1, .header p {
             margin: 0;
-            font-size: 14pt;
-            font-weight: normal;
-            text-transform: uppercase;
+            padding: 0;
         }
-        .header h1 {
-            margin: 0;
-            font-size: 16pt;
-            font-weight: bold;
-            text-transform: uppercase;
-        }
-        .header p {
-            margin: 2px 0 0 0;
-            font-size: 10pt;
-            font-style: italic;
+
+        h1 { font-size: 16pt; margin: 5px 0; }
+        h2 { font-size: 14pt; margin: 5px 0; }
+        h3 { font-size: 12pt; margin: 5px 0; }
+        
+        /* Quill Alignment Classes */
+        .ql-align-center { text-align: center; }
+        .ql-align-right { text-align: right; }
+        .ql-align-justify { text-align: justify; }
+        
+        /* Quill Size Classes */
+        .ql-size-small { font-size: 10pt; }
+        .ql-size-large { font-size: 14pt; }
+        .ql-size-huge { font-size: 18pt; }
+        
+        /* Quill Indent Classes */
+        .ql-indent-1 { padding-left: 3em; }
+        .ql-indent-2 { padding-left: 6em; }
+        .ql-indent-3 { padding-left: 9em; }
+        .ql-indent-4 { padding-left: 12em; }
+        .ql-indent-5 { padding-left: 15em; }
+        .ql-indent-6 { padding-left: 18em; }
+        .ql-indent-7 { padding-left: 21em; }
+        .ql-indent-8 { padding-left: 24em; }
+        .ql-tab {
+            display: inline-block;
+            width: 30px;
         }
         .title {
             text-align: center;
@@ -54,6 +69,12 @@
             margin-bottom: 20px;
             text-align: justify;
         }
+        .content p {
+            white-space: pre-wrap;
+            -moz-tab-size: 4;
+            tab-size: 4;
+            margin: 0;
+        }
         .table-data {
             width: 100%;
             margin: 15px 0 15px 20px;
@@ -72,11 +93,11 @@
         }
         .signature-right {
             float: right;
-            width: 250px;
+            width: 300px;
             text-align: center;
         }
         .qr-code {
-            margin: 10px auto;
+            margin: 5px auto;
         }
     </style>
 </head>
@@ -86,9 +107,15 @@
             <!-- Note: using absolute URL or base64 is recommended for DOMPDF logos -->
             <img src="{{ $settings['kop_logo'] }}" alt="Logo" style="width: 80px; position: absolute; top: 10px; left: 10px;" />
         @endif
-        <h3>{!! $settings['kop_pemda'] ?? 'PEMERINTAH DAERAH' !!}</h3>
-        <h1>{{ $settings['kop_desa'] ?? 'DESA' }}</h1>
-        <p>{{ $settings['kop_alamat'] ?? '' }}</p>
+        <div style="margin-bottom: 5px;">
+            {!! $settings['kop_pemda'] ?? '<h3>PEMERINTAH DAERAH</h3>' !!}
+        </div>
+        <div style="margin-bottom: 5px;">
+            {!! $settings['kop_desa'] ?? '<h1>DESA</h1>' !!}
+        </div>
+        <div>
+            {!! $settings['kop_alamat'] ?? '' !!}
+        </div>
     </div>
 
     <div class="title">
@@ -102,7 +129,7 @@
 
     <div class="signature-box">
         <div class="signature-right">
-            <p>Mengeruda, {{ \Carbon\Carbon::parse($letterRequest->updated_at)->locale('id')->translatedFormat('d F Y') }}<br />An. Kepala Desa Mengeruda</p>
+            <p>Mengeruda, {{ \Carbon\Carbon::parse($letterRequest->updated_at)->locale('id')->translatedFormat('d F Y') }}<br />Kepala Desa Mengeruda</p>
             
             <div class="qr-code">
                 @if(isset($qrCodeSvg))
@@ -112,7 +139,10 @@
                 @endif
             </div>
 
-            <p style="font-size: 9pt; color: #555;">Dokumen ini ditandatangani secara elektronik. Verifikasi keaslian melalui pemindaian QR Code di atas.</p>
+            <div style="margin-bottom: 2px;">
+                {!! $settings['kepala_desa_name'] ?? '<p style="font-weight: bold; text-decoration: underline;">KEPALA DESA MENGERUDA</p>' !!}
+            </div>
+            <p style="font-size: 9pt; color: #555; margin-top: 2px;">Dokumen ini ditandatangani secara elektronik.</br>Verifikasi keaslian melalui pemindaian QR Code di atas.</p>
         </div>
         <div style="clear: both;"></div>
     </div>

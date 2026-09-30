@@ -23,6 +23,8 @@ Route::prefix('surat')->group(function () {
         // --- Rute Warga ---
         Route::get('/permohonan/my', [CitizenController::class, 'getMyRequests']);
         Route::post('/permohonan', [CitizenController::class, 'submitRequest']);
+        Route::post('/permohonan/{id}/accept', [CitizenController::class, 'acceptLetter']);
+        Route::post('/permohonan/{id}/revision', [CitizenController::class, 'requestRevision']);
 
         // --- Rute Admin (Verifikasi Akun & Surat) ---
         Route::prefix('admin')->group(function () {
@@ -35,12 +37,14 @@ Route::prefix('surat')->group(function () {
             Route::post('/users/{id}/approve-kk', [AdminController::class, 'approveKk']);
             Route::post('/users/{id}/reject-kk', [AdminController::class, 'rejectKk']);
             Route::get('/users/{id}/ktp', [AdminController::class, 'viewUserKtp']);
+            Route::get('/users/{id}/kk', [AdminController::class, 'viewUserKk']);
 
             Route::get('/settings', [\App\Http\Controllers\Api\Surat\SettingController::class, 'index']);
             Route::put('/settings', [\App\Http\Controllers\Api\Surat\SettingController::class, 'update']);
 
             Route::get('/surat', [AdminController::class, 'getLetterRequests']);
             Route::post('/surat/{id}/approve', [AdminController::class, 'approveLetterRequest']);
+            Route::put('/surat/{id}', [AdminController::class, 'updateLetterRequest']);
             Route::post('/surat/{id}/reject', [AdminController::class, 'rejectLetterRequest']);
         });
     });

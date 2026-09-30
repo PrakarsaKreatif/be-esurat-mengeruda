@@ -19,7 +19,8 @@ class PdfController extends Controller
         $letterRequest->load(['user', 'template']);
 
         // URL validasi tanda tangan elektronik
-        $validationUrl = "http://e-surat.mengeruda.id/validasi?token=" . $letterRequest->token;
+        $frontendUrl = env('FRONTEND_URL', 'http://e-surat.mengeruda.id');
+        $validationUrl = rtrim($frontendUrl, '/') . "/validasi?token=" . $letterRequest->token;
 
         // Generate QR Code format SVG base64 agar kompatibel dengan DOMPDF
         $qrSvg = QrCode::format('svg')->size(110)->generate($validationUrl);
@@ -27,10 +28,42 @@ class PdfController extends Controller
 
         $content = $letterRequest->template->content ?? '<p>Konten surat belum diisi oleh Admin.</p>';
 
-        $nomorSurat = '140 / ES / MGR / ' . $letterRequest->created_at->format('m') . ' / ' . $letterRequest->created_at->format('Y');
+        $settings = \App\Models\Setting::all()->pluck('value', 'key')->toArray();
+
+        // Konversi bulan menjadi Romawi
+        $romanMonths = ['01'=>'I', '02'=>'II', '03'=>'III', '04'=>'IV', '05'=>'V', '06'=>'VI', '07'=>'VII', '08'=>'VIII', '09'=>'IX', '10'=>'X', '11'=>'XI', '12'=>'XII'];
+        $monthRoman = $romanMonths[$letterRequest->created_at->format('m')];
+        
+        // Buat nomor urut dari ID request surat (bisa diubah logicnya nanti jika ada tabel khusus nomor)
+        $nomorUrut = str_pad($letterRequest->id, 3, '0', STR_PAD_LEFT);
+        $tahun = $letterRequest->created_at->format('Y');
+        
+        // Format dinamis nomor surat, default sesuai permintaan terbaru
+        $formatNomorSurat = $settings['format_nomor_surat'] ?? '140/Pem-Mgr/09/[NOMOR_URUT]/[BULAN_ROMAWI]/[TAHUN]';
+        
+        $nomorSurat = str_replace(
+            ['[NOMOR_URUT]', '[BULAN_ROMAWI]', '[TAHUN]'],
+            [$nomorUrut, $monthRoman, $tahun],
+            $formatNomorSurat
+        );
+
         $tanggalSurat = \Carbon\Carbon::parse($letterRequest->updated_at)->locale('id')->translatedFormat('d F Y');
         
         $requesterData = is_string($letterRequest->requester_data) ? json_decode($letterRequest->requester_data, true) : $letterRequest->requester_data;
+
+        if (!$requesterData && $letterRequest->user) {
+            $requesterData = [
+                'name' => $letterRequest->user->name,
+                'nik' => $letterRequest->user->nik,
+                'phone' => $letterRequest->user->phone,
+            ];
+            
+            // Coba ekstrak dari form_data jika ini untuk anggota keluarga (backward compatibility)
+            if (is_array($letterRequest->form_data) && isset($letterRequest->form_data['family_member_name'])) {
+                $requesterData['name'] = $letterRequest->form_data['family_member_name'];
+                $requesterData['nik'] = $letterRequest->form_data['family_member_nik'] ?? null;
+            }
+        }
 
         $replacements = [
             '[NAMA]' => strtoupper($requesterData['name'] ?? ''),
@@ -50,7 +83,27 @@ class PdfController extends Controller
             }
         }
 
-        $settings = \App\Models\Setting::all()->pluck('value', 'key')->toArray();
+        // Trik khusus: Konversi baris yang menggunakan Tab untuk meluruskan titik dua (:) menjadi HTML Table
+        // agar lurus sempurna di PDF meskipun menggunakan font proporsional.
+        $content = preg_replace_callback(
+            '/((?:<p[^>]*>|<br\s*\/?>|^))((?:(?!<p|<br).)*?)(?:\t)+(?:&nbsp;|\s)*:(?:&nbsp;|\s|\t)*((?:(?!<\/p>|<br).)*?)(?=(?:<\/p>|<br\s*\/?>|$))/i',
+            function($matches) {
+                $prefix = $matches[1];
+                $label = $matches[2];
+                $value = $matches[3];
+                
+                // Hilangkan <br> sebelum table karena table secara otomatis membuat baris baru
+                if (preg_match('/<br/i', $prefix)) {
+                    $prefix = ''; 
+                }
+                
+                return $prefix . '<table style="width:100%; border:none; margin:0; padding:0; border-collapse:collapse;"><tr><td style="width:180px; vertical-align:top; padding:0;">' . $label . '</td><td style="width:15px; vertical-align:top; padding:0;">:</td><td style="vertical-align:top; padding:0;">' . $value . '</td></tr></table>';
+            },
+            $content
+        );
+
+        // DOMPDF tidak mendukung karakter \t dengan baik, ubah sisa \t menjadi span berukuran tetap
+        $content = str_replace("\t", '<span class="ql-tab"></span>', $content);
 
         // Convert kop_logo URL to base64 for DOMPDF to avoid localhost HTTP timeouts
         if (!empty($settings['kop_logo'])) {
@@ -102,8 +155,8 @@ class PdfController extends Controller
             return response()->json(['message' => 'Anda tidak berhak mengakses dokumen ini.'], 403);
         }
 
-        if ($letterRequest->status !== 'approved') {
-            return response()->json(['message' => 'Surat belum disetujui.'], 404);
+        if (!in_array($letterRequest->status, ['approved', 'review'])) {
+            return response()->json(['message' => 'Surat belum disetujui atau siap diunduh.'], 404);
         }
 
         if (!$letterRequest->pdf_path || !Storage::disk('local')->exists($letterRequest->pdf_path)) {
@@ -113,10 +166,17 @@ class PdfController extends Controller
             $letterRequest->save();
         }
 
-        return Storage::disk('local')->download(
-            $letterRequest->pdf_path, 
-            'Surat_' . str_replace(' ', '_', $letterRequest->template->name ?? 'Resmi') . '_' . $letterRequest->id . '.pdf'
-        );
+        $absolutePath = Storage::disk('local')->path($letterRequest->pdf_path);
+        $filename = 'Surat_' . str_replace(' ', '_', $letterRequest->template->name ?? 'Resmi') . '_' . $letterRequest->id . '.pdf';
+
+        if ($request->query('preview') === 'true' || $letterRequest->status === 'review') {
+            return response()->file($absolutePath, [
+                'Content-Type' => 'application/pdf',
+                'Content-Disposition' => 'inline; filename="' . $filename . '"'
+            ]);
+        }
+
+        return response()->download($absolutePath, $filename);
     }
 
     /**
@@ -139,6 +199,19 @@ class PdfController extends Controller
         }
 
         $requesterData = is_string($letterRequest->requester_data) ? json_decode($letterRequest->requester_data, true) : $letterRequest->requester_data;
+        
+        if (!$requesterData && $letterRequest->user) {
+            $requesterData = [
+                'name' => $letterRequest->user->name,
+                'nik' => $letterRequest->user->nik,
+                'phone' => $letterRequest->user->phone,
+            ];
+            if (is_array($letterRequest->form_data) && isset($letterRequest->form_data['family_member_name'])) {
+                $requesterData['name'] = $letterRequest->form_data['family_member_name'];
+                $requesterData['nik'] = $letterRequest->form_data['family_member_nik'] ?? null;
+            }
+        }
+
         $nik = $requesterData['nik'] ?? '';
 
         return response()->json([

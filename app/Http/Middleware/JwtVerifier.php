@@ -90,6 +90,10 @@ class JwtVerifier
                 $localUser->applications = $decoded->applications;
             }
 
+            // Inject KK info dynamically without modifying DB schema
+            $localUser->kk_path = $decoded->kk_path ?? null;
+            $localUser->is_kk_approved = (bool)($decoded->is_kk_approved ?? false);
+
             // Authenticate the virtual user for this request
             Auth::setUser($localUser);
 
