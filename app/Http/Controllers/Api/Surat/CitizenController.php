@@ -89,10 +89,15 @@ class CitizenController extends Controller
                 $query->whereIn('name', ['Super Admin', 'admin_surat', 'Admin']);
             })->get();
 
-            foreach ($admins as $admin) {
-                if ($admin->email) {
-                    Mail::to($admin->email)->send(new NewLetterRequestMail($letterRequest));
-                }
+            $adminEmails = $admins->pluck('email')->filter()->unique()->toArray();
+            
+            // Fallback: Jika belum ada admin yang disinkronisasi ke lokal, gunakan email dari .env
+            if (empty($adminEmails) && env('ADMIN_SURAT_EMAIL')) {
+                $adminEmails = [env('ADMIN_SURAT_EMAIL')];
+            }
+
+            foreach ($adminEmails as $email) {
+                Mail::to($email)->send(new NewLetterRequestMail($letterRequest));
             }
         } catch (\Exception $e) {
             report($e);
@@ -142,10 +147,14 @@ class CitizenController extends Controller
                 $query->whereIn('name', ['Super Admin', 'admin_surat', 'Admin']);
             })->get();
 
-            foreach ($admins as $admin) {
-                if ($admin->email) {
-                    Mail::to($admin->email)->send(new LetterFinalizedMail($letterRequest));
-                }
+            $adminEmails = $admins->pluck('email')->filter()->unique()->toArray();
+            
+            if (empty($adminEmails) && env('ADMIN_SURAT_EMAIL')) {
+                $adminEmails = [env('ADMIN_SURAT_EMAIL')];
+            }
+
+            foreach ($adminEmails as $email) {
+                Mail::to($email)->send(new LetterFinalizedMail($letterRequest));
             }
         } catch (\Exception $e) {
             report($e);
@@ -184,10 +193,14 @@ class CitizenController extends Controller
                 $query->whereIn('name', ['Super Admin', 'admin_surat', 'Admin']);
             })->get();
 
-            foreach ($admins as $admin) {
-                if ($admin->email) {
-                    Mail::to($admin->email)->send(new LetterRevisionRequestMail($letterRequest));
-                }
+            $adminEmails = $admins->pluck('email')->filter()->unique()->toArray();
+            
+            if (empty($adminEmails) && env('ADMIN_SURAT_EMAIL')) {
+                $adminEmails = [env('ADMIN_SURAT_EMAIL')];
+            }
+
+            foreach ($adminEmails as $email) {
+                Mail::to($email)->send(new LetterRevisionRequestMail($letterRequest));
             }
         } catch (\Exception $e) {
             report($e);
